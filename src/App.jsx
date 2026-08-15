@@ -21,6 +21,8 @@ import {
   SELLER_PASSWORD,
   STORAGE_KEY,
   buildProductForm,
+  deleteProductFromDatabase,
+  fetchProductsFromDatabase,
   formatCurrency,
   getProductDiscount,
   getStoredBuyerCart,
@@ -32,6 +34,7 @@ import {
   saveAppState,
   saveBuyerAccounts,
   saveBuyerSession,
+  upsertProductInDatabase,
 } from './store.js'
 
 const defaultTheme = () => {
@@ -69,6 +72,23 @@ function App() {
   })
   const [cartOpen, setCartOpen] = useState(false)
   const [redirectTo, setRedirectTo] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    const syncProducts = async () => {
+      const products = await fetchProductsFromDatabase()
+      if (!cancelled) {
+        setAppState((prev) => ({ ...prev, products }))
+      }
+    }
+
+    syncProducts()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     saveAppState(appState)
@@ -248,22 +268,29 @@ function App() {
     }))
   }
 
-  const addOrUpdateProduct = (product) => {
+  const addOrUpdateProduct = async (product) => {
+    const savedProduct = await upsertProductInDatabase(product)
+
+    if (!savedProduct) return
+
     setAppState((prev) => {
       const existingIndex = prev.products.findIndex((item) => item.id === product.id)
       const nextProducts = [...prev.products]
 
       if (existingIndex >= 0) {
-        nextProducts[existingIndex] = product
+        nextProducts[existingIndex] = savedProduct
       } else {
-        nextProducts.unshift(product)
+        nextProducts.unshift(savedProduct)
       }
 
       return { ...prev, products: nextProducts }
     })
   }
 
-  const deleteProduct = (productId) => {
+  const deleteProduct = async (productId) => {
+    const didDelete = await deleteProductFromDatabase(productId)
+    if (!didDelete) return
+
     setAppState((prev) => ({
       ...prev,
       products: prev.products.filter((product) => product.id !== productId),

@@ -1,3 +1,5 @@
+import { supabase } from './supabaseClient'
+
 export const STORAGE_KEY = 'zenish-enterprises-v2'
 export const BUYER_ACCOUNT_KEY = 'zenish-buyer-accounts'
 export const BUYER_SESSION_KEY = 'zenish-buyer-session'
@@ -80,151 +82,6 @@ export function sanitizeAppStateForStorage(data) {
   return next
 }
 
-export const defaultProducts = [
-  {
-    id: 'prod-wooden-tray',
-    name: 'Wooden Serving Tray',
-    shortDescription: 'Hand-finished tray with natural grain detailing.',
-    description:
-      'Crafted to bring warmth and character to everyday hosting, this serving tray pairs a premium finish with practical functionality.',
-    categoryId: 'home-decor',
-    price: 899,
-    mrp: 1199,
-    stock: 24,
-    sku: 'ZEN-TRAY-01',
-    material: 'Solid wood and lacquer finish',
-    dimensions: '42 x 30 x 4 cm',
-    weight: '1.2 kg',
-    specs: 'Natural wood grain\nScratch-resistant finish\nIdeal for serving and decor',
-    customSpecifications: 'Suitable for tea, snacks, and display styling',
-    amazonUrl: 'https://www.amazon.in',
-    flipkartUrl: 'https://www.flipkart.com',
-    featured: true,
-    newArrival: true,
-    bestseller: false,
-    offer: true,
-    status: 'active',
-    demo: true,
-    images: [
-      'https://images.unsplash.com/photo-1517705008128-361805f42e86?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80',
-    ],
-    primaryImage:
-      'https://images.unsplash.com/photo-1517705008128-361805f42e86?auto=format&fit=crop&w=900&q=80',
-    video: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
-    variations: [{ id: makeId('variation'), name: 'Size', options: ['Small', 'Medium', 'Large'] }],
-    seoTitle: 'Wooden Serving Tray | Zenish Enterprises',
-    seoDescription: 'Premium handcrafted serving tray for stylish hosting and home décor.',
-    keywords: 'wooden serving tray, home decor, premium serving accessories',
-  },
-  {
-    id: 'prod-ceramic-vase',
-    name: 'Ceramic Accent Vase',
-    shortDescription: 'Modern sculptural vase crafted for statement displays.',
-    description:
-      'This accent vase adds character to a console table, shelf, or room corner with a refined contemporary profile.',
-    categoryId: 'home-decor',
-    price: 1299,
-    mrp: 1699,
-    stock: 18,
-    sku: 'ZEN-VASE-02',
-    material: 'Ceramic with matte glaze',
-    dimensions: '28 x 18 cm',
-    weight: '0.9 kg',
-    specs: 'Matte texture\nContemporary silhouette\nIndoor décor ready',
-    customSpecifications: 'Perfect for faux stems, dried flowers, or empty styling',
-    amazonUrl: '',
-    flipkartUrl: 'https://www.flipkart.com',
-    featured: true,
-    newArrival: false,
-    bestseller: true,
-    offer: true,
-    status: 'active',
-    demo: true,
-    images: [
-      'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?auto=format&fit=crop&w=900&q=80',
-    ],
-    primaryImage:
-      'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?auto=format&fit=crop&w=900&q=80',
-    video: '',
-    variations: [{ id: makeId('variation'), name: 'Design', options: ['Classic', 'Floral', 'Royal'] }],
-    seoTitle: 'Ceramic Accent Vase | Zenish Enterprises',
-    seoDescription: 'Modern ceramic accent vase designed for elegant home styling.',
-    keywords: 'ceramic vase, home decor, modern accent decor',
-  },
-  {
-    id: 'prod-bamboo-basket',
-    name: 'Bamboo Utility Basket',
-    shortDescription: 'Versatile storage basket with a clean, airy finish.',
-    description:
-      'A practical and stylish basket designed for tidy storage while elevating the mood of bedrooms, entries, and utility spaces.',
-    categoryId: 'storage',
-    price: 699,
-    mrp: 949,
-    stock: 0,
-    sku: 'ZEN-BASKET-03',
-    material: 'Natural bamboo and cotton rope',
-    dimensions: '30 x 22 x 18 cm',
-    weight: '0.75 kg',
-    specs: 'Lightweight\nNaturally textured\nMulti-purpose storage',
-    customSpecifications: 'Works for household essentials, linens, and daily clutter',
-    amazonUrl: 'https://www.amazon.in',
-    flipkartUrl: '',
-    featured: false,
-    newArrival: true,
-    bestseller: false,
-    offer: false,
-    status: 'active',
-    demo: true,
-    images: [
-      'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=900&q=80',
-    ],
-    primaryImage:
-      'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=900&q=80',
-    video: '',
-    variations: [{ id: makeId('variation'), name: 'Set', options: ['Set of 2', 'Set of 4', 'Set of 6'] }],
-    seoTitle: 'Bamboo Utility Basket | Zenish Enterprises',
-    seoDescription: 'Premium bamboo utility basket for neat organization and modern home styling.',
-    keywords: 'bamboo basket, storage basket, utility storage',
-  },
-  {
-    id: 'prod-metal-jar',
-    name: 'Premium Glass Jar Set',
-    shortDescription: 'Elegant storage jars for pantry organization.',
-    description:
-      'This set blends practicality with elevated design, making it ideal for dry storage and beautiful kitchen styling.',
-    categoryId: 'kitchen',
-    price: 1599,
-    mrp: 2099,
-    stock: 12,
-    sku: 'ZEN-JAR-04',
-    material: 'Glass with metal lid',
-    dimensions: '12 x 12 x 18 cm each',
-    weight: '1.1 kg per set',
-    specs: 'Air-tight lid\nGlass body\nKitchen-safe',
-    customSpecifications: 'Suitable for grains, tea, snacks, and pantry display',
-    amazonUrl: '',
-    flipkartUrl: 'https://www.flipkart.com',
-    featured: false,
-    newArrival: false,
-    bestseller: true,
-    offer: true,
-    status: 'active',
-    demo: true,
-    images: [
-      'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=900&q=80',
-    ],
-    primaryImage:
-      'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=900&q=80',
-    video: '',
-    variations: [{ id: makeId('variation'), name: 'Set', options: ['Set of 2', 'Set of 4'] }],
-    seoTitle: 'Glass Jar Set | Zenish Enterprises',
-    seoDescription: 'Premium pantry storage jars with elegant glass finish and secure lids.',
-    keywords: 'glass jar set, pantry jars, kitchen storage',
-  },
-]
-
 export const defaultReviews = [
   {
     id: 'rev-1',
@@ -276,7 +133,7 @@ export const defaultTeamMembers = [
 export const createDefaultState = () => ({
   settings: defaultSettings,
   categories: defaultCategories,
-  products: defaultProducts,
+  products: [],
   reviews: defaultReviews,
   messages: defaultMessages,
   team: defaultTeamMembers,
@@ -284,6 +141,119 @@ export const createDefaultState = () => ({
   sellerSession: { isLoggedIn: false },
   buyerSession: { isLoggedIn: false, name: '', email: '' },
 })
+
+export function toDbProduct(product = {}) {
+  return {
+    id: product.id || makeId('product'),
+    name: product.name || '',
+    short_description: product.shortDescription || '',
+    description: product.description || '',
+    category_id: product.categoryId || '',
+    price: Number(product.price || 0),
+    mrp: Number(product.mrp || 0),
+    stock: Number(product.stock || 0),
+    sku: product.sku || '',
+    material: product.material || '',
+    dimensions: product.dimensions || '',
+    weight: product.weight || '',
+    specs: product.specs || '',
+    custom_specifications: product.customSpecifications || '',
+    amazon_url: product.amazonUrl || '',
+    flipkart_url: product.flipkartUrl || '',
+    featured: Boolean(product.featured),
+    new_arrival: Boolean(product.newArrival),
+    bestseller: Boolean(product.bestseller),
+    offer: Boolean(product.offer),
+    status: product.status || 'active',
+    primary_image: product.primaryImage || product.images?.[0] || '',
+    images: Array.isArray(product.images) ? product.images.filter(Boolean) : [],
+    video: product.video || '',
+    variations: Array.isArray(product.variations) ? product.variations : [],
+    seo_title: product.seoTitle || product.name || '',
+    seo_description: product.seoDescription || product.shortDescription || '',
+    keywords: product.keywords || product.name || '',
+    updated_at: new Date().toISOString(),
+    created_at: product.createdAt || new Date().toISOString(),
+  }
+}
+
+export function fromDbProduct(row) {
+  if (!row) return null
+
+  return {
+    id: row.id,
+    name: row.name || '',
+    shortDescription: row.short_description || '',
+    description: row.description || '',
+    categoryId: row.category_id || '',
+    price: Number(row.price || 0),
+    mrp: Number(row.mrp || 0),
+    stock: Number(row.stock || 0),
+    sku: row.sku || '',
+    material: row.material || '',
+    dimensions: row.dimensions || '',
+    weight: row.weight || '',
+    specs: row.specs || '',
+    customSpecifications: row.custom_specifications || '',
+    amazonUrl: row.amazon_url || '',
+    flipkartUrl: row.flipkart_url || '',
+    featured: Boolean(row.featured),
+    newArrival: Boolean(row.new_arrival),
+    bestseller: Boolean(row.bestseller),
+    offer: Boolean(row.offer),
+    status: row.status || 'active',
+    seoTitle: row.seo_title || row.name || '',
+    seoDescription: row.seo_description || row.short_description || '',
+    keywords: row.keywords || row.name || '',
+    images: Array.isArray(row.images) ? row.images.filter(Boolean) : [],
+    primaryImage: row.primary_image || (Array.isArray(row.images) && row.images[0]) || '',
+    video: row.video || '',
+    variations: Array.isArray(row.variations) ? row.variations : [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    demo: false,
+  }
+}
+
+export async function fetchProductsFromDatabase() {
+  if (!supabase) return []
+
+  const { data, error } = await supabase.from('products').select('*').order('updated_at', { ascending: false })
+
+  if (error) {
+    console.error('Unable to load products from Supabase', error)
+    return []
+  }
+
+  return (data || []).map(fromDbProduct).filter(Boolean)
+}
+
+export async function upsertProductInDatabase(product) {
+  if (!supabase) return null
+
+  const payload = toDbProduct(product)
+  const { data, error } = await supabase.from('products').upsert(payload, { onConflict: 'id' }).select().single()
+
+  if (error) {
+    console.error('Unable to save product to Supabase', error)
+    return null
+  }
+
+  return fromDbProduct(data)
+}
+
+export async function deleteProductFromDatabase(productId) {
+  if (!supabase) return false
+
+  const { error } = await supabase.from('products').delete().eq('id', productId)
+
+  if (error) {
+    console.error('Unable to delete product from Supabase', error)
+    return false
+  }
+
+  return true
+}
 
 export function makeId(prefix = 'id') {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -426,7 +396,7 @@ export function loadAppState() {
       ...parsed,
       settings: { ...defaultSettings, ...(parsed.settings || {}) },
       categories: parsed.categories || defaultCategories,
-      products: parsed.products || defaultProducts,
+      products: [],
       reviews: parsed.reviews || defaultReviews,
       messages: parsed.messages || defaultMessages,
       team: parsed.team || defaultTeamMembers,
@@ -441,30 +411,20 @@ export function loadAppState() {
 
 export function saveAppState(data) {
   try {
-    const sanitized = sanitizeAppStateForStorage(data)
+    if (!data || typeof data !== 'object') return
+
+    const { products: _products, ...persistedState } = data
+    const sanitized = sanitizeAppStateForStorage(persistedState)
     const serialized = JSON.stringify(sanitized)
 
     if (serialized.length > MAX_LOCAL_STORAGE_BYTES) {
       const fallback = sanitizeAppStateForStorage({
         ...sanitized,
-        products: (sanitized.products || []).map((product) => ({
-          ...product,
-          video: '',
-          images: Array.isArray(product.images) ? product.images.slice(0, 1) : [],
-          primaryImage: Array.isArray(product.images) && product.images[0] ? product.images[0] : '',
-        })),
+        messages: [],
+        reviews: [],
       })
 
-      const compact = JSON.stringify(fallback)
-      if (compact.length > MAX_LOCAL_STORAGE_BYTES) {
-        window.localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({ ...createDefaultState(), products: (sanitized.products || []).slice(0, 1) }),
-        )
-        return
-      }
-
-      window.localStorage.setItem(STORAGE_KEY, compact)
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fallback))
       return
     }
 
