@@ -276,6 +276,19 @@ function App() {
     })
   }
 
+  const clearCart = () => {
+    setAppState((prev) => {
+      const nextCart = []
+      if (prev.buyerSession?.email) {
+        persistBuyerCart(nextCart, prev.buyerSession.email)
+      } else {
+        persistBuyerCart(nextCart, '')
+      }
+
+      return { ...prev, cart: nextCart }
+    })
+  }
+
   const updateAnalytics = (group, key, delta = 1) => {
     setAppState((prev) => {
       const current = prev.analytics?.[group] || {}
@@ -334,6 +347,7 @@ function App() {
           <Route path="about" element={<AboutPage appState={appState} />} />
           <Route path="contact" element={<ContactPage appState={appState} addMessage={addMessage} />} />
           <Route path="login" element={<LoginPage buyerSession={appState.buyerSession} onLoginBuyer={loginBuyer} onRegisterBuyer={registerBuyer} onLogoutBuyer={logoutBuyer} />} />
+          <Route path="cart" element={<CartPage appState={appState} onUpdateCartItem={updateCartItem} onRemoveFromCart={removeFromCart} onClearCart={clearCart} />} />
           <Route
             path="product/:productId"
             element={<ProductPage appState={appState} updateAnalytics={updateAnalytics} addMessage={addMessage} onAddToCart={addToCart} />}
@@ -485,9 +499,9 @@ function Header({ theme, setTheme, cartCount, setCartOpen, buyerSession, onLogou
           >
             {theme === 'light' ? 'Dark' : 'Light'}
           </button>
-          <button type="button" className="cart-pill" aria-label="Open shopping cart" onClick={() => setCartOpen(true)}>
+          <Link to="/cart" className="cart-pill" aria-label="Open shopping cart">
             Cart <span>{cartCount}</span>
-          </button>
+          </Link>
         </div>
       </div>
     </header>
@@ -1912,6 +1926,83 @@ function ProductRow({ products, appState, onAddToCart }) {
   )
 }
 
+function CartPage({ appState, onUpdateCartItem, onRemoveFromCart, onClearCart }) {
+  const subtotal = appState.cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const totalItems = appState.cart.reduce((sum, item) => sum + item.quantity, 0)
+  const [checkoutState, setCheckoutState] = useState('')
+
+  const handleCheckout = () => {
+    if (!appState.cart.length) {
+      setCheckoutState('Your cart is empty. Add products before checkout.')
+      return
+    }
+
+    setCheckoutState('Order placed successfully. We will contact you for confirmation.')
+    onClearCart()
+  }
+
+  return (
+    <div className="container cart-page">
+      <div className="section-header cart-header">
+        <div>
+          <span className="eyebrow">Your basket</span>
+          <h2>Cart</h2>
+        </div>
+        <p>{totalItems} item{totalItems === 1 ? '' : 's'} selected</p>
+      </div>
+
+      {appState.cart.length ? (
+        <div className="cart-grid">
+          <div className="cart-list">
+            {appState.cart.map((item) => (
+              <div key={item.id} className="cart-item-card">
+                <img src={item.image} alt={item.name} className="cart-item-image" />
+                <div className="cart-item-details">
+                  <div className="cart-item-row">
+                    <h3>{item.name}</h3>
+                    <button type="button" className="link-button destructive" onClick={() => onRemoveFromCart(item.productId)}>Remove</button>
+                  </div>
+                  <p>{formatCurrency(item.price)} each</p>
+                  <div className="cart-quantity-row">
+                    <button type="button" onClick={() => onUpdateCartItem(item.productId, item.quantity - 1)}>-</button>
+                    <span>{item.quantity}</span>
+                    <button type="button" onClick={() => onUpdateCartItem(item.productId, item.quantity + 1)}>+</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <aside className="checkout-panel">
+            <h3>Order summary</h3>
+            <div className="summary-row">
+              <span>Items</span>
+              <strong>{totalItems}</strong>
+            </div>
+            <div className="summary-row">
+              <span>Subtotal</span>
+              <strong>{formatCurrency(subtotal)}</strong>
+            </div>
+            <div className="summary-row total-row">
+              <span>Total</span>
+              <strong>{formatCurrency(subtotal)}</strong>
+            </div>
+            <button type="button" className="primary-button full-width" onClick={handleCheckout}>Checkout</button>
+            <button type="button" className="secondary-button full-width" onClick={onClearCart}>Clear cart</button>
+            {checkoutState && <p className="success-message">{checkoutState}</p>}
+          </aside>
+        </div>
+      ) : (
+        <div className="empty-state cart-empty-state">
+          <h3>Your cart is empty</h3>
+          <p>Add products to start building your order.</p>
+          <Link to="/shop" className="primary-button">Continue shopping</Link>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CartDrawer({ isOpen, items, subtotal, onClose, onUpdateQuantity, onRemove }) {
   if (!isOpen) return null
 
@@ -1947,7 +2038,7 @@ function CartDrawer({ isOpen, items, subtotal, onClose, onUpdateQuantity, onRemo
                 <span>Subtotal</span>
                 <strong>{formatCurrency(subtotal)}</strong>
               </div>
-              <button type="button" className="primary-button" disabled>Checkout coming soon</button>
+              <Link to="/cart" className="primary-button" onClick={onClose}>View cart</Link>
             </div>
           </>
         ) : (
