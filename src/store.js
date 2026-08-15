@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient'
 
 export function getSupabaseConfigError() {
   if (supabase) return null
-  return 'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file.'
+  return 'Supabase is not configured with a valid URL and anonymous key.'
 }
 
 export const STORAGE_KEY = 'zenish-enterprises-v2'
