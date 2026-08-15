@@ -34,6 +34,8 @@ import {
   saveAppState,
   saveBuyerAccounts,
   saveBuyerSession,
+  signInSellerWithSupabase,
+  signOutSellerFromSupabase,
   upsertProductInDatabase,
 } from './store.js'
 
@@ -77,9 +79,16 @@ function App() {
     let cancelled = false
 
     const syncProducts = async () => {
-      const products = await fetchProductsFromDatabase()
-      if (!cancelled) {
-        setAppState((prev) => ({ ...prev, products }))
+      try {
+        const products = await fetchProductsFromDatabase()
+        if (!cancelled) {
+          setAppState((prev) => ({ ...prev, products }))
+        }
+      } catch (error) {
+        console.error('Unable to load products from Supabase.', error)
+        if (!cancelled) {
+          setAppState((prev) => ({ ...prev, products: [] }))
+        }
       }
     }
 
@@ -249,8 +258,22 @@ function App() {
     saveBuyerSession({ isLoggedIn: false, name: '', email: '' })
   }
 
-  const loginSeller = (email, password) => {
-    if (email === SELLER_EMAIL && password === SELLER_PASSWORD) {
+  const loginSeller = async (email, password) => {
+    const trimmedEmail = String(email || '').trim()
+    const trimmedPassword = String(password || '').trim()
+
+    try {
+      await signInSellerWithSupabase(trimmedEmail, trimmedPassword)
+      setAppState((prev) => ({
+        ...prev,
+        sellerSession: { isLoggedIn: true },
+      }))
+      return true
+    } catch (error) {
+      console.warn('Supabase seller auth unavailable, using local fallback check.', error)
+    }
+
+    if (trimmedEmail.toLowerCase() === SELLER_EMAIL.toLowerCase() && trimmedPassword === SELLER_PASSWORD) {
       setAppState((prev) => ({
         ...prev,
         sellerSession: { isLoggedIn: true },
@@ -261,7 +284,13 @@ function App() {
     return false
   }
 
-  const logoutSeller = () => {
+  const logoutSeller = async () => {
+    try {
+      await signOutSellerFromSupabase()
+    } catch (error) {
+      console.warn('Seller logout from Supabase failed.', error)
+    }
+
     setAppState((prev) => ({
       ...prev,
       sellerSession: { isLoggedIn: false },
@@ -269,32 +298,43 @@ function App() {
   }
 
   const addOrUpdateProduct = async (product) => {
-    const savedProduct = await upsertProductInDatabase(product)
+    try {
+      const savedProduct = await upsertProductInDatabase(product)
 
-    if (!savedProduct) return
+      setAppState((prev) => {
+        const existingIndex = prev.products.findIndex((item) => item.id === product.id)
+        const nextProducts = [...prev.products]
 
-    setAppState((prev) => {
-      const existingIndex = prev.products.findIndex((item) => item.id === product.id)
-      const nextProducts = [...prev.products]
+        if (existingIndex >= 0) {
+          nextProducts[existingIndex] = savedProduct
+        } else {
+          nextProducts.unshift(savedProduct)
+        }
 
-      if (existingIndex >= 0) {
-        nextProducts[existingIndex] = savedProduct
-      } else {
-        nextProducts.unshift(savedProduct)
-      }
+        return { ...prev, products: nextProducts }
+      })
 
-      return { ...prev, products: nextProducts }
-    })
+      return { ok: true, product: savedProduct }
+    } catch (error) {
+      console.error('Product save failed.', error)
+      return { ok: false, error: error?.message || 'Product save failed.' }
+    }
   }
 
   const deleteProduct = async (productId) => {
-    const didDelete = await deleteProductFromDatabase(productId)
-    if (!didDelete) return
+    try {
+      await deleteProductFromDatabase(productId)
 
-    setAppState((prev) => ({
-      ...prev,
-      products: prev.products.filter((product) => product.id !== productId),
-    }))
+      setAppState((prev) => ({
+        ...prev,
+        products: prev.products.filter((product) => product.id !== productId),
+      }))
+
+      return { ok: true }
+    } catch (error) {
+      console.error('Product delete failed.', error)
+      return { ok: false, error: error?.message || 'Product delete failed.' }
+    }
   }
 
   const saveCategory = (category) => {
@@ -1536,6 +1576,7 @@ function ProductEditorPage({ appState, onSave, mode }) {
   const { productId } = useParams()
   const navigate = useNavigate()
   const product = appState.products.find((item) => item.id === productId)
+  const [submitError, setSubmitError] = useState('')
   const [form, setForm] = useState(() => ({
     ...buildProductForm(product?.categoryId || appState.categories[0]?.id || ''),
     ...(product || {}),
@@ -1615,8 +1656,10 @@ function ProductEditorPage({ appState, onSave, mode }) {
     }))
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
+    setSubmitError('')
+
     const normalized = {
       ...form,
       id: form.id || makeId('product'),
@@ -1632,7 +1675,13 @@ function ProductEditorPage({ appState, onSave, mode }) {
       keywords: form.keywords || form.name,
       demo: Boolean(form.demo),
     }
-    onSave(normalized)
+
+    const result = await onSave(normalized)
+    if (!result || !result.ok) {
+      setSubmitError(result?.error || 'The product could not be saved. Check the Supabase configuration and table fields.')
+      return
+    }
+
     navigate('/seller/products')
   }
 
@@ -1757,6 +1806,7 @@ function ProductEditorPage({ appState, onSave, mode }) {
           <label>SEO description<textarea rows="3" value={form.seoDescription} onChange={(event) => updateField('seoDescription', event.target.value)} /></label>
         </div>
 
+        {submitError && <p className="error-message">{submitError}</p>}
         <div className="form-actions">
           <button type="submit" className="primary-button">Save product</button>
           <button type="button" className="secondary-button" onClick={() => navigate('/seller/products')}>Cancel</button>

@@ -1,5 +1,10 @@
 import { supabase } from './supabaseClient'
 
+export function getSupabaseConfigError() {
+  if (supabase) return null
+  return 'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file.'
+}
+
 export const STORAGE_KEY = 'zenish-enterprises-v2'
 export const BUYER_ACCOUNT_KEY = 'zenish-buyer-accounts'
 export const BUYER_SESSION_KEY = 'zenish-buyer-session'
@@ -216,43 +221,65 @@ export function fromDbProduct(row) {
 }
 
 export async function fetchProductsFromDatabase() {
-  if (!supabase) return []
+  if (!supabase) {
+    throw new Error(getSupabaseConfigError())
+  }
 
   const { data, error } = await supabase.from('products').select('*').order('updated_at', { ascending: false })
 
   if (error) {
-    console.error('Unable to load products from Supabase', error)
-    return []
+    throw new Error(error.message || 'Unable to load products from Supabase.')
   }
 
   return (data || []).map(fromDbProduct).filter(Boolean)
 }
 
 export async function upsertProductInDatabase(product) {
-  if (!supabase) return null
+  if (!supabase) {
+    throw new Error(getSupabaseConfigError())
+  }
 
   const payload = toDbProduct(product)
   const { data, error } = await supabase.from('products').upsert(payload, { onConflict: 'id' }).select().single()
 
   if (error) {
-    console.error('Unable to save product to Supabase', error)
-    return null
+    throw new Error(error.message || 'Unable to save product to Supabase.')
   }
 
   return fromDbProduct(data)
 }
 
 export async function deleteProductFromDatabase(productId) {
-  if (!supabase) return false
+  if (!supabase) {
+    throw new Error(getSupabaseConfigError())
+  }
 
   const { error } = await supabase.from('products').delete().eq('id', productId)
 
   if (error) {
-    console.error('Unable to delete product from Supabase', error)
-    return false
+    throw new Error(error.message || 'Unable to delete product from Supabase.')
   }
 
   return true
+}
+
+export async function signInSellerWithSupabase(email, password) {
+  if (!supabase) {
+    throw new Error(getSupabaseConfigError())
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+
+  if (error) {
+    throw new Error(error.message || 'Seller authentication failed.')
+  }
+
+  return data?.user || null
+}
+
+export async function signOutSellerFromSupabase() {
+  if (!supabase) return
+  await supabase.auth.signOut()
 }
 
 export function makeId(prefix = 'id') {
