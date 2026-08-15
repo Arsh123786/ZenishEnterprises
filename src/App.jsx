@@ -187,7 +187,7 @@ function App() {
   const cartTotal = appState.cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/ZenishEnterprises">
       <Routes>
         <Route
           path="/"
