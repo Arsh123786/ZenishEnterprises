@@ -14,6 +14,7 @@ import {
   useSearchParams,
 } from 'react-router-dom'
 import './App.css'
+import { supabase } from './supabaseClient.js'
 import {
   BUYER_ACCOUNT_KEY,
   DEFAULT_BUYER_ACCOUNT,
@@ -80,6 +81,8 @@ function App() {
     let cancelled = false
 
     const syncProducts = async () => {
+      if (!supabase) return
+
       try {
         const products = await fetchProductsFromDatabase()
         if (!cancelled) {
@@ -300,6 +303,23 @@ function App() {
   }
 
   const addOrUpdateProduct = async (product) => {
+    if (!supabase) {
+      setAppState((prev) => {
+        const existingIndex = prev.products.findIndex((item) => item.id === product.id)
+        const nextProducts = [...prev.products]
+
+        if (existingIndex >= 0) {
+          nextProducts[existingIndex] = product
+        } else {
+          nextProducts.unshift(product)
+        }
+
+        return { ...prev, products: nextProducts }
+      })
+
+      return { ok: true, product }
+    }
+
     try {
       const savedProduct = await upsertProductInDatabase(product)
 
@@ -324,6 +344,15 @@ function App() {
   }
 
   const deleteProduct = async (productId) => {
+    if (!supabase) {
+      setAppState((prev) => ({
+        ...prev,
+        products: prev.products.filter((product) => product.id !== productId),
+      }))
+
+      return { ok: true }
+    }
+
     try {
       await deleteProductFromDatabase(productId)
 

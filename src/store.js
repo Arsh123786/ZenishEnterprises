@@ -435,7 +435,7 @@ export function loadAppState() {
       ...parsed,
       settings: { ...defaultSettings, ...(isRecord(parsed.settings) ? parsed.settings : {}) },
       categories: asArray(parsed.categories, defaultCategories),
-      products: [],
+      products: asArray(parsed.products, []),
       reviews: asArray(parsed.reviews, defaultReviews),
       messages: asArray(parsed.messages, defaultMessages),
       team: asArray(parsed.team, defaultTeamMembers),
@@ -453,8 +453,7 @@ export function saveAppState(data) {
   try {
     if (!data || typeof data !== 'object') return
 
-    const { products: _products, ...persistedState } = data
-    const sanitized = sanitizeAppStateForStorage(persistedState)
+    const sanitized = sanitizeAppStateForStorage(data)
     const serialized = JSON.stringify(sanitized)
 
     if (serialized.length > MAX_LOCAL_STORAGE_BYTES) {
