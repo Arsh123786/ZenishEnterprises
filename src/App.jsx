@@ -38,6 +38,28 @@ const defaultTheme = () => {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
+const compressImageToDataUrl = (file, maxWidth = 1200, quality = 0.72) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const scale = Math.min(1, maxWidth / Math.max(img.width, img.height))
+        canvas.width = Math.max(1, Math.round(img.width * scale))
+        canvas.height = Math.max(1, Math.round(img.height * scale))
+
+        const context = canvas.getContext('2d')
+        context.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.onerror = () => reject(new Error('Image could not be processed'))
+      img.src = String(reader.result)
+    }
+    reader.onerror = () => reject(new Error('Image file could not be read'))
+    reader.readAsDataURL(file)
+  })
+
 function App() {
   const [appState, setAppState] = useState(() => loadAppState())
   const [theme, setTheme] = useState(() => {
@@ -1446,17 +1468,19 @@ function ProductEditorPage({ appState, onSave, mode }) {
     if (!files.length) return
 
     Promise.all(
-      files.map(
-        (file) =>
-          new Promise((resolve) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result)
-            reader.readAsDataURL(file)
-          }),
-      ),
+      files.map(async (file) => {
+        try {
+          return await compressImageToDataUrl(file)
+        } catch {
+          return ''
+        }
+      }),
     ).then((images) => {
+      const filteredImages = images.filter(Boolean)
+      if (!filteredImages.length) return
+
       setForm((prev) => {
-        const merged = [...(prev.images || []), ...images]
+        const merged = [...(prev.images || []), ...filteredImages]
         return {
           ...prev,
           images: merged,
@@ -1469,6 +1493,12 @@ function ProductEditorPage({ appState, onSave, mode }) {
   const handleVideoFile = (event) => {
     const file = event.target.files?.[0]
     if (!file) return
+
+    if (file.size > 2 * 1024 * 1024) {
+      window.alert('Video files are limited to 2 MB in this app so product data stays saved after refresh.')
+      event.target.value = ''
+      return
+    }
 
     const reader = new FileReader()
     reader.onload = () => {

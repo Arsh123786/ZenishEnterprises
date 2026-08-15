@@ -43,6 +43,43 @@ export const defaultCategories = [
   { id: 'storage', name: 'Storage & Utility', description: 'Organised, practical spaces', active: true },
 ]
 
+const MAX_LOCAL_STORAGE_BYTES = 4_200_000
+
+export function sanitizeAppStateForStorage(data) {
+  if (!data || typeof data !== 'object') return data
+
+  const next = { ...data }
+
+  if (Array.isArray(next.products)) {
+    next.products = next.products.map((product) => {
+      if (!product || typeof product !== 'object') return product
+
+      const normalized = { ...product }
+
+      if (Array.isArray(normalized.images)) {
+        normalized.images = normalized.images.filter(Boolean).filter((image) => {
+          if (typeof image !== 'string') return false
+          return !image.startsWith('data:') || image.length < 350000
+        })
+
+        if (normalized.images.length) {
+          normalized.primaryImage = normalized.primaryImage || normalized.images[0]
+        } else {
+          normalized.primaryImage = ''
+        }
+      }
+
+      if (typeof normalized.video === 'string' && normalized.video.startsWith('data:') && normalized.video.length > 250000) {
+        normalized.video = ''
+      }
+
+      return normalized
+    })
+  }
+
+  return next
+}
+
 export const defaultProducts = [
   {
     id: 'prod-wooden-tray',
@@ -404,7 +441,34 @@ export function loadAppState() {
 
 export function saveAppState(data) {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+    const sanitized = sanitizeAppStateForStorage(data)
+    const serialized = JSON.stringify(sanitized)
+
+    if (serialized.length > MAX_LOCAL_STORAGE_BYTES) {
+      const fallback = sanitizeAppStateForStorage({
+        ...sanitized,
+        products: (sanitized.products || []).map((product) => ({
+          ...product,
+          video: '',
+          images: Array.isArray(product.images) ? product.images.slice(0, 1) : [],
+          primaryImage: Array.isArray(product.images) && product.images[0] ? product.images[0] : '',
+        })),
+      })
+
+      const compact = JSON.stringify(fallback)
+      if (compact.length > MAX_LOCAL_STORAGE_BYTES) {
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ ...createDefaultState(), products: (sanitized.products || []).slice(0, 1) }),
+        )
+        return
+      }
+
+      window.localStorage.setItem(STORAGE_KEY, compact)
+      return
+    }
+
+    window.localStorage.setItem(STORAGE_KEY, serialized)
   } catch (error) {
     console.warn('Unable to persist Zenish state', error)
   }
