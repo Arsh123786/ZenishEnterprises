@@ -72,6 +72,13 @@ function App() {
 
   useEffect(() => {
     saveAppState(appState)
+
+    if (typeof BroadcastChannel !== 'undefined') {
+      const syncChannel = new BroadcastChannel('zenish-enterprises-sync')
+      syncChannel.postMessage({ key: STORAGE_KEY, value: JSON.stringify(appState) })
+      syncChannel.close()
+    }
+
     if (appState.buyerSession?.email) {
       persistBuyerCart(appState.cart, appState.buyerSession.email)
     } else {
@@ -87,24 +94,54 @@ function App() {
   }, [theme])
 
   useEffect(() => {
-    const handleStorageSync = (event) => {
-      if (event.key !== STORAGE_KEY) return
+    const refreshFromStorage = (rawValue) => {
+      if (!rawValue) return
 
       try {
-        const nextState = event.newValue ? JSON.parse(event.newValue) : null
-        if (nextState) {
-          setAppState((prev) => ({
-            ...prev,
-            ...loadAppState(),
-          }))
-        }
+        const nextState = JSON.parse(rawValue)
+        if (!nextState || typeof nextState !== 'object') return
+
+        setAppState((prev) => ({
+          ...prev,
+          ...nextState,
+          settings: { ...prev.settings, ...(nextState.settings || {}) },
+          categories: nextState.categories || prev.categories,
+          products: nextState.products || prev.products,
+          reviews: nextState.reviews || prev.reviews,
+          messages: nextState.messages || prev.messages,
+          team: nextState.team || prev.team,
+          cart: nextState.cart || prev.cart,
+          sellerSession: { isLoggedIn: Boolean(nextState.sellerSession?.isLoggedIn) },
+          buyerSession: {
+            isLoggedIn: Boolean(nextState.buyerSession?.isLoggedIn),
+            name: nextState.buyerSession?.name || '',
+            email: nextState.buyerSession?.email || '',
+          },
+        }))
       } catch {
         // Ignore malformed payloads from another tab.
       }
     }
 
+    const handleStorageSync = (event) => {
+      if (event.key !== STORAGE_KEY) return
+      refreshFromStorage(event.newValue)
+    }
+
+    const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('zenish-enterprises-sync') : null
+    const handleBroadcastMessage = (event) => {
+      if (!event?.data || event.data.key !== STORAGE_KEY) return
+      refreshFromStorage(event.data.value)
+    }
+
+    channel?.addEventListener('message', handleBroadcastMessage)
     window.addEventListener('storage', handleStorageSync)
-    return () => window.removeEventListener('storage', handleStorageSync)
+
+    return () => {
+      channel?.removeEventListener('message', handleBroadcastMessage)
+      channel?.close()
+      window.removeEventListener('storage', handleStorageSync)
+    }
   }, [])
 
   const syncBuyerCartFromStorage = (email) => {
