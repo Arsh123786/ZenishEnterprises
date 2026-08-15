@@ -135,6 +135,15 @@ export const defaultTeamMembers = [
   },
 ]
 
+const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const asArray = (value, fallback) => (Array.isArray(value) ? value : fallback)
+
+export const defaultAnalytics = {
+  productViews: {},
+  marketplaceClicks: {},
+  videoViews: {},
+}
+
 export const createDefaultState = () => ({
   settings: defaultSettings,
   categories: defaultCategories,
@@ -143,6 +152,7 @@ export const createDefaultState = () => ({
   messages: defaultMessages,
   team: defaultTeamMembers,
   cart: [],
+  analytics: defaultAnalytics,
   sellerSession: { isLoggedIn: false },
   buyerSession: { isLoggedIn: false, name: '', email: '' },
 })
@@ -416,18 +426,21 @@ export function loadAppState() {
       email: parsed?.buyerSession?.email || '',
     }
 
-    const cart = buyerSession.email ? (parsed?.cart || getStoredBuyerCart(buyerSession.email)) : (parsed?.cart || getStoredBuyerCart(''))
+    const savedCart = asArray(parsed?.cart, [])
+    const storedCart = getStoredBuyerCart(buyerSession.email ? buyerSession.email : '')
+    const cart = savedCart.length ? savedCart : storedCart
 
     return {
       ...createDefaultState(),
       ...parsed,
-      settings: { ...defaultSettings, ...(parsed.settings || {}) },
-      categories: parsed.categories || defaultCategories,
+      settings: { ...defaultSettings, ...(isRecord(parsed.settings) ? parsed.settings : {}) },
+      categories: asArray(parsed.categories, defaultCategories),
       products: [],
-      reviews: parsed.reviews || defaultReviews,
-      messages: parsed.messages || defaultMessages,
-      team: parsed.team || defaultTeamMembers,
+      reviews: asArray(parsed.reviews, defaultReviews),
+      messages: asArray(parsed.messages, defaultMessages),
+      team: asArray(parsed.team, defaultTeamMembers),
       cart,
+      analytics: { ...defaultAnalytics, ...(isRecord(parsed.analytics) ? parsed.analytics : {}) },
       sellerSession: { isLoggedIn: Boolean(parsed?.sellerSession?.isLoggedIn) },
       buyerSession,
     }
