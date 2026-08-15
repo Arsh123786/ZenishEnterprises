@@ -19,6 +19,7 @@ import {
   DEFAULT_BUYER_ACCOUNT,
   SELLER_EMAIL,
   SELLER_PASSWORD,
+  STORAGE_KEY,
   buildProductForm,
   formatCurrency,
   getProductDiscount,
@@ -84,6 +85,27 @@ function App() {
       window.localStorage.setItem('zenish-theme', theme)
     }
   }, [theme])
+
+  useEffect(() => {
+    const handleStorageSync = (event) => {
+      if (event.key !== STORAGE_KEY) return
+
+      try {
+        const nextState = event.newValue ? JSON.parse(event.newValue) : null
+        if (nextState) {
+          setAppState((prev) => ({
+            ...prev,
+            ...loadAppState(),
+          }))
+        }
+      } catch {
+        // Ignore malformed payloads from another tab.
+      }
+    }
+
+    window.addEventListener('storage', handleStorageSync)
+    return () => window.removeEventListener('storage', handleStorageSync)
+  }, [])
 
   const syncBuyerCartFromStorage = (email) => {
     if (!email) {
