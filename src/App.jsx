@@ -89,10 +89,7 @@ function App() {
           setAppState((prev) => ({ ...prev, products }))
         }
       } catch (error) {
-        console.error('Unable to load products from Supabase.', error)
-        if (!cancelled) {
-          setAppState((prev) => ({ ...prev, products: [] }))
-        }
+        console.warn('Unable to load products from Supabase; keeping locally saved products.', error)
       }
     }
 
@@ -302,22 +299,26 @@ function App() {
     }))
   }
 
+  const saveProductLocally = (product) => {
+    setAppState((prev) => {
+      const existingIndex = prev.products.findIndex((item) => item.id === product.id)
+      const nextProducts = [...prev.products]
+
+      if (existingIndex >= 0) {
+        nextProducts[existingIndex] = product
+      } else {
+        nextProducts.unshift(product)
+      }
+
+      return { ...prev, products: nextProducts }
+    })
+
+    return { ok: true, product }
+  }
+
   const addOrUpdateProduct = async (product) => {
     if (!supabase) {
-      setAppState((prev) => {
-        const existingIndex = prev.products.findIndex((item) => item.id === product.id)
-        const nextProducts = [...prev.products]
-
-        if (existingIndex >= 0) {
-          nextProducts[existingIndex] = product
-        } else {
-          nextProducts.unshift(product)
-        }
-
-        return { ...prev, products: nextProducts }
-      })
-
-      return { ok: true, product }
+      return saveProductLocally(product)
     }
 
     try {
@@ -338,8 +339,8 @@ function App() {
 
       return { ok: true, product: savedProduct }
     } catch (error) {
-      console.error('Product save failed.', error)
-      return { ok: false, error: error?.message || 'Product save failed.' }
+      console.warn('Product database save failed; saving locally instead.', error)
+      return saveProductLocally(product)
     }
   }
 
@@ -363,8 +364,12 @@ function App() {
 
       return { ok: true }
     } catch (error) {
-      console.error('Product delete failed.', error)
-      return { ok: false, error: error?.message || 'Product delete failed.' }
+      console.warn('Product database delete failed; deleting locally instead.', error)
+      setAppState((prev) => ({
+        ...prev,
+        products: prev.products.filter((product) => product.id !== productId),
+      }))
+      return { ok: true }
     }
   }
 
