@@ -15,14 +15,22 @@ import {
 } from 'react-router-dom'
 import './App.css'
 import {
+  BUYER_ACCOUNT_KEY,
+  DEFAULT_BUYER_ACCOUNT,
   SELLER_EMAIL,
   SELLER_PASSWORD,
   buildProductForm,
   formatCurrency,
   getProductDiscount,
+  getStoredBuyerCart,
   loadAppState,
+  loadBuyerAccounts,
+  loadBuyerSession,
   makeId,
+  persistBuyerCart,
   saveAppState,
+  saveBuyerAccounts,
+  saveBuyerSession,
 } from './store.js'
 
 const defaultTheme = () => {
@@ -37,9 +45,15 @@ function App() {
     return savedTheme || defaultTheme()
   })
   const [cartOpen, setCartOpen] = useState(false)
+  const [redirectTo, setRedirectTo] = useState('')
 
   useEffect(() => {
     saveAppState(appState)
+    if (appState.buyerSession?.email) {
+      persistBuyerCart(appState.cart, appState.buyerSession.email)
+    } else {
+      persistBuyerCart(appState.cart, '')
+    }
   }, [appState])
 
   useEffect(() => {
@@ -48,6 +62,91 @@ function App() {
       window.localStorage.setItem('zenish-theme', theme)
     }
   }, [theme])
+
+  const syncBuyerCartFromStorage = (email) => {
+    if (!email) {
+      const guestCart = getStoredBuyerCart('')
+      setAppState((prev) => ({ ...prev, cart: guestCart }))
+      return
+    }
+
+    const signedCart = getStoredBuyerCart(email)
+    setAppState((prev) => ({
+      ...prev,
+      cart: signedCart.length ? signedCart : prev.cart,
+    }))
+  }
+
+  const loginBuyer = (email, password) => {
+    const normalizedEmail = String(email || '').trim().toLowerCase()
+    const normalizedPassword = String(password || '').trim()
+    const accounts = loadBuyerAccounts()
+    const account = accounts.find(
+      (item) => item.email.toLowerCase() === normalizedEmail && item.password === normalizedPassword,
+    )
+
+    if (!account) return false
+
+    const nextSession = {
+      isLoggedIn: true,
+      name: account.name,
+      email: account.email,
+    }
+
+    setAppState((prev) => {
+      const currentCart = prev.cart || []
+      const storedCart = getStoredBuyerCart(account.email)
+      const mergedCart = storedCart.length ? storedCart : currentCart
+
+      return {
+        ...prev,
+        buyerSession: nextSession,
+        cart: mergedCart,
+      }
+    })
+    saveBuyerSession(nextSession)
+    persistBuyerCart(getStoredBuyerCart(account.email) || [], account.email)
+    return true
+  }
+
+  const registerBuyer = ({ name, email, password }) => {
+    const trimmedName = String(name || '').trim()
+    const normalizedEmail = String(email || '').trim().toLowerCase()
+    const trimmedPassword = String(password || '').trim()
+    if (!trimmedName || !normalizedEmail || !trimmedPassword) return false
+
+    const accounts = loadBuyerAccounts()
+    const exists = accounts.some((account) => account.email.toLowerCase() === normalizedEmail)
+    if (exists) return false
+
+    const nextAccount = {
+      id: makeId('buyer'),
+      name: trimmedName,
+      email: normalizedEmail,
+      password: trimmedPassword,
+    }
+
+    const nextAccounts = [nextAccount, ...accounts]
+    saveBuyerAccounts(nextAccounts)
+
+    const nextSession = { isLoggedIn: true, name: trimmedName, email: normalizedEmail }
+    setAppState((prev) => ({
+      ...prev,
+      buyerSession: nextSession,
+      cart: prev.cart || [],
+    }))
+    saveBuyerSession(nextSession)
+    return true
+  }
+
+  const logoutBuyer = () => {
+    const activeCart = appState.cart || []
+    if (appState.buyerSession?.email) {
+      persistBuyerCart(activeCart, appState.buyerSession.email)
+    }
+    setAppState((prev) => ({ ...prev, buyerSession: { isLoggedIn: false, name: '', email: '' }, cart: activeCart }))
+    saveBuyerSession({ isLoggedIn: false, name: '', email: '' })
+  }
 
   const loginSeller = (email, password) => {
     if (email === SELLER_EMAIL && password === SELLER_PASSWORD) {
@@ -120,48 +219,61 @@ function App() {
   const addToCart = (product, quantity = 1) => {
     setAppState((prev) => {
       const item = prev.cart.find((entry) => entry.productId === product.id)
-
-      if (item) {
-        return {
-          ...prev,
-          cart: prev.cart.map((entry) =>
+      const nextCart = item
+        ? prev.cart.map((entry) =>
             entry.productId === product.id ? { ...entry, quantity: entry.quantity + quantity } : entry,
-          ),
-        }
+          )
+        : [
+            ...prev.cart,
+            {
+              id: makeId('cart'),
+              productId: product.id,
+              name: product.name,
+              price: Number(product.price || 0),
+              image: product.primaryImage || product.images?.[0] || '',
+              quantity,
+            },
+          ]
+
+      if (prev.buyerSession?.email) {
+        persistBuyerCart(nextCart, prev.buyerSession.email)
+      } else {
+        persistBuyerCart(nextCart, '')
       }
 
-      return {
-        ...prev,
-        cart: [
-          ...prev.cart,
-          {
-            id: makeId('cart'),
-            productId: product.id,
-            name: product.name,
-            price: Number(product.price || 0),
-            image: product.primaryImage || product.images?.[0] || '',
-            quantity,
-          },
-        ],
-      }
+      return { ...prev, cart: nextCart }
     })
     setCartOpen(true)
   }
 
   const updateCartItem = (productId, quantity) => {
-    setAppState((prev) => ({
-      ...prev,
-      cart: prev.cart
+    setAppState((prev) => {
+      const nextCart = prev.cart
         .map((item) => (item.productId === productId ? { ...item, quantity: Math.max(0, quantity) } : item))
-        .filter((item) => item.quantity > 0),
-    }))
+        .filter((item) => item.quantity > 0)
+
+      if (prev.buyerSession?.email) {
+        persistBuyerCart(nextCart, prev.buyerSession.email)
+      } else {
+        persistBuyerCart(nextCart, '')
+      }
+
+      return { ...prev, cart: nextCart }
+    })
   }
 
   const removeFromCart = (productId) => {
-    setAppState((prev) => ({
-      ...prev,
-      cart: prev.cart.filter((item) => item.productId !== productId),
-    }))
+    setAppState((prev) => {
+      const nextCart = prev.cart.filter((item) => item.productId !== productId)
+
+      if (prev.buyerSession?.email) {
+        persistBuyerCart(nextCart, prev.buyerSession.email)
+      } else {
+        persistBuyerCart(nextCart, '')
+      }
+
+      return { ...prev, cart: nextCart }
+    })
   }
 
   const updateAnalytics = (group, key, delta = 1) => {
@@ -206,6 +318,10 @@ function App() {
               onAddToCart={addToCart}
               onUpdateCartItem={updateCartItem}
               onRemoveFromCart={removeFromCart}
+              buyerSession={appState.buyerSession}
+              onLogoutBuyer={logoutBuyer}
+              onLoginBuyer={loginBuyer}
+              onRegisterBuyer={registerBuyer}
             />
           }
         >
@@ -217,7 +333,7 @@ function App() {
           <Route path="offers" element={<OffersPage appState={appState} />} />
           <Route path="about" element={<AboutPage appState={appState} />} />
           <Route path="contact" element={<ContactPage appState={appState} addMessage={addMessage} />} />
-          <Route path="login" element={<LoginPage />} />
+          <Route path="login" element={<LoginPage buyerSession={appState.buyerSession} onLoginBuyer={loginBuyer} onRegisterBuyer={registerBuyer} onLogoutBuyer={logoutBuyer} />} />
           <Route
             path="product/:productId"
             element={<ProductPage appState={appState} updateAnalytics={updateAnalytics} addMessage={addMessage} onAddToCart={addToCart} />}
@@ -279,10 +395,19 @@ function BuyerLayout({
   onAddToCart,
   onUpdateCartItem,
   onRemoveFromCart,
+  buyerSession,
+  onLogoutBuyer,
 }) {
   return (
     <div className="shell">
-      <Header theme={theme} setTheme={setTheme} cartCount={cartCount} setCartOpen={setCartOpen} />
+      <Header
+        theme={theme}
+        setTheme={setTheme}
+        cartCount={cartCount}
+        setCartOpen={setCartOpen}
+        buyerSession={buyerSession}
+        onLogoutBuyer={onLogoutBuyer}
+      />
       <main className="page-shell">
         <Outlet context={{ appState, onAddToCart }} />
       </main>
@@ -303,7 +428,7 @@ function BuyerLayout({
   )
 }
 
-function Header({ theme, setTheme, cartCount, setCartOpen }) {
+function Header({ theme, setTheme, cartCount, setCartOpen, buyerSession, onLogoutBuyer }) {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
 
@@ -342,7 +467,16 @@ function Header({ theme, setTheme, cartCount, setCartOpen }) {
             />
             <button type="submit">Search</button>
           </form>
-          <Link to="/login" className="ghost-button small">Account</Link>
+
+          {buyerSession?.isLoggedIn ? (
+            <>
+              <span className="user-pill">Hi, {buyerSession.name || 'Buyer'}</span>
+              <button type="button" className="ghost-button small" onClick={onLogoutBuyer}>Logout</button>
+            </>
+          ) : (
+            <Link to="/login" className="ghost-button small">Account</Link>
+          )}
+
           <button
             type="button"
             className="ghost-button small"
@@ -985,23 +1119,96 @@ function ContactPage({ appState, addMessage }) {
   )
 }
 
-function LoginPage() {
+function LoginPage({ buyerSession, onLoginBuyer, onRegisterBuyer, onLogoutBuyer }) {
   const navigate = useNavigate()
+  const [isRegistering, setIsRegistering] = useState(false)
+  const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const handleSubmit = (event) => {
+    event.preventDefault()
+    setError('')
+    setSuccess('')
+
+    if (isRegistering) {
+      const ok = onRegisterBuyer(form)
+      if (!ok) {
+        setError('This buyer account already exists. Please log in instead.')
+        return
+      }
+
+      setSuccess('Buyer account created successfully.')
+      setForm({ name: '', email: '', password: '' })
+      setTimeout(() => navigate('/'), 800)
+      return
+    }
+
+    const ok = onLoginBuyer(form.email, form.password)
+    if (!ok) {
+      setError('Invalid buyer credentials. Use the demo buyer account or create a new one.')
+      return
+    }
+
+    navigate('/')
+  }
+
+  const handleLogout = () => {
+    onLogoutBuyer()
+    setSuccess('Buyer logged out.')
+  }
+
+  if (buyerSession?.isLoggedIn) {
+    return (
+      <div className="container auth-page">
+        <div className="auth-panel">
+          <img src={zenishLogo} alt="Zenish Enterprises" className="auth-logo" />
+          <span className="eyebrow">Buyer account</span>
+          <h1>Welcome back</h1>
+          <p className="user-summary">Signed in as {buyerSession.name || buyerSession.email}</p>
+          <div className="auth-grid">
+            <button type="button" className="primary-button" onClick={() => navigate('/')}>Continue shopping</button>
+            <button type="button" className="secondary-button" onClick={handleLogout}>Logout</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container auth-page">
       <div className="auth-panel">
         <img src={zenishLogo} alt="Zenish Enterprises" className="auth-logo" />
         <span className="eyebrow">Welcome to Zenish</span>
-        <h1>Login</h1>
+        <h1>{isRegistering ? 'Create buyer account' : 'Buyer login'}</h1>
+        <form className="login-form" onSubmit={handleSubmit}>
+          {isRegistering && (
+            <label>
+              Full name
+              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Your name" required />
+            </label>
+          )}
+          <label>
+            Email
+            <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="you@example.com" required />
+          </label>
+          <label>
+            Password
+            <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="Enter password" required />
+          </label>
+          {error && <p className="error-message">{error}</p>}
+          {success && <p className="success-message">{success}</p>}
+          <button type="submit" className="primary-button">{isRegistering ? 'Create account' : 'Login as buyer'}</button>
+        </form>
         <div className="auth-grid">
-          <button type="button" className="primary-button" onClick={() => navigate('/')}>
-            Login as Buyer
+          <button type="button" className="secondary-button" onClick={() => setIsRegistering((prev) => !prev)}>
+            {isRegistering ? 'Already have an account?' : 'Create account'}
           </button>
           <button type="button" className="secondary-button" onClick={() => navigate('/seller/login')}>
             Login as Seller
           </button>
         </div>
+        <p className="developer-note small-note">Demo buyer: buyer@zenish.com / Zenish@123</p>
       </div>
     </div>
   )

@@ -104,6 +104,20 @@
   gap: 12px;
 }
 
+.user-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(91, 92, 255, 0.1);
+  color: var(--text-strong);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .search-form {
   display: flex;
   align-items: center;
@@ -1337,6 +1351,13 @@ textarea {
     flex-wrap: wrap;
   }
 
+  .nav-actions .ghost-button.small,
+  .nav-actions .cart-pill,
+  .nav-actions .user-pill {
+    width: auto;
+    min-width: 0;
+  }
+
   .product-row,
   .product-grid,
   .category-grid,
@@ -1417,5 +1438,19 @@ textarea {
 
   .seller-main {
     padding: 18px 12px;
+  }
+
+  .user-pill {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .nav-actions {
+    gap: 8px;
+  }
+
+  .ghost-button.small,
+  .cart-pill {
+    width: 100%;
   }
 }

@@ -1,6 +1,15 @@
 export const STORAGE_KEY = 'zenish-enterprises-v2'
+export const BUYER_ACCOUNT_KEY = 'zenish-buyer-accounts'
+export const BUYER_SESSION_KEY = 'zenish-buyer-session'
+export const GUEST_CART_KEY = 'zenish-buyer-guest-cart'
 export const SELLER_EMAIL = 'Zenish.support@gmail.com'
 export const SELLER_PASSWORD = 'Arsh786#'
+export const DEFAULT_BUYER_ACCOUNT = {
+  id: 'buyer-demo',
+  name: 'Demo Buyer',
+  email: 'buyer@zenish.com',
+  password: 'Zenish@123',
+}
 
 export const defaultSettings = {
   businessName: 'ZENISH ENTERPRISES',
@@ -236,6 +245,7 @@ export const createDefaultState = () => ({
   team: defaultTeamMembers,
   cart: [],
   sellerSession: { isLoggedIn: false },
+  buyerSession: { isLoggedIn: false, name: '', email: '' },
 })
 
 export function makeId(prefix = 'id') {
@@ -292,6 +302,72 @@ export function getProductDiscount(product) {
   return Math.round(((Number(product.mrp) - Number(product.price)) / Number(product.mrp)) * 100)
 }
 
+export function getBuyerCartKey(email = '') {
+  const safeEmail = email.trim().toLowerCase()
+  return safeEmail ? `zenish-buyer-cart-${safeEmail}` : GUEST_CART_KEY
+}
+
+export function loadBuyerAccounts() {
+  try {
+    const raw = window.localStorage.getItem(BUYER_ACCOUNT_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    const accounts = Array.isArray(parsed) ? parsed : []
+    const hasDefault = accounts.some((account) => account.email?.toLowerCase() === DEFAULT_BUYER_ACCOUNT.email.toLowerCase())
+    return hasDefault ? accounts : [DEFAULT_BUYER_ACCOUNT, ...accounts]
+  } catch {
+    return [DEFAULT_BUYER_ACCOUNT]
+  }
+}
+
+export function saveBuyerAccounts(accounts) {
+  try {
+    window.localStorage.setItem(BUYER_ACCOUNT_KEY, JSON.stringify(accounts))
+  } catch (error) {
+    console.warn('Unable to persist buyer accounts', error)
+  }
+}
+
+export function loadBuyerSession() {
+  try {
+    const raw = window.localStorage.getItem(BUYER_SESSION_KEY)
+    if (!raw) return { isLoggedIn: false, name: '', email: '' }
+    const parsed = JSON.parse(raw)
+    return {
+      isLoggedIn: Boolean(parsed?.isLoggedIn),
+      name: parsed?.name || '',
+      email: parsed?.email || '',
+    }
+  } catch {
+    return { isLoggedIn: false, name: '', email: '' }
+  }
+}
+
+export function saveBuyerSession(session) {
+  try {
+    window.localStorage.setItem(BUYER_SESSION_KEY, JSON.stringify(session || { isLoggedIn: false, name: '', email: '' }))
+  } catch (error) {
+    console.warn('Unable to persist buyer session', error)
+  }
+}
+
+export function getStoredBuyerCart(email = '') {
+  try {
+    const key = getBuyerCartKey(email)
+    const raw = window.localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+export function persistBuyerCart(cart, email = '') {
+  try {
+    window.localStorage.setItem(getBuyerCartKey(email), JSON.stringify(cart || []))
+  } catch (error) {
+    console.warn('Unable to persist buyer cart', error)
+  }
+}
+
 export function loadAppState() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
@@ -300,6 +376,14 @@ export function loadAppState() {
     }
 
     const parsed = JSON.parse(raw)
+    const buyerSession = {
+      isLoggedIn: Boolean(parsed?.buyerSession?.isLoggedIn),
+      name: parsed?.buyerSession?.name || '',
+      email: parsed?.buyerSession?.email || '',
+    }
+
+    const cart = buyerSession.email ? (parsed?.cart || getStoredBuyerCart(buyerSession.email)) : (parsed?.cart || getStoredBuyerCart(''))
+
     return {
       ...createDefaultState(),
       ...parsed,
@@ -309,8 +393,9 @@ export function loadAppState() {
       reviews: parsed.reviews || defaultReviews,
       messages: parsed.messages || defaultMessages,
       team: parsed.team || defaultTeamMembers,
-      cart: parsed.cart || [],
+      cart,
       sellerSession: { isLoggedIn: Boolean(parsed?.sellerSession?.isLoggedIn) },
+      buyerSession,
     }
   } catch {
     return createDefaultState()
