@@ -19,8 +19,6 @@ import {
   BUYER_ACCOUNT_KEY,
   DEFAULT_BUYER_ACCOUNT,
   defaultAnalytics,
-  SELLER_EMAIL,
-  SELLER_PASSWORD,
   STORAGE_KEY,
   buildProductForm,
   deleteProductFromDatabase,
@@ -28,6 +26,7 @@ import {
   formatCurrency,
   getProductDiscount,
   getStoredBuyerCart,
+  getSupabaseConfigError,
   loadAppState,
   loadBuyerAccounts,
   loadBuyerSession,
@@ -39,6 +38,7 @@ import {
   signInSellerWithSupabase,
   signOutSellerFromSupabase,
   upsertProductInDatabase,
+  fromDbProduct,
 } from './store.js'
 
 const defaultTheme = () => {
@@ -69,7 +69,10 @@ const compressImageToDataUrl = (file, maxWidth = 1200, quality = 0.72) =>
   })
 
 function App() {
-  const [appState, setAppState] = useState(() => loadAppState())
+  const [appState, setAppState] = useState(() => {
+    const initialState = loadAppState()
+    return { ...initialState, products: [] }
+  })
   const [theme, setTheme] = useState(() => {
     const savedTheme = typeof window !== 'undefined' ? window.localStorage.getItem('zenish-theme') : null
     return savedTheme || defaultTheme()
@@ -81,7 +84,10 @@ function App() {
     let cancelled = false
 
     const syncProducts = async () => {
-      if (!supabase) return
+      if (!supabase) {
+        console.warn('Supabase is not configured. Products cannot be loaded.')
+        return
+      }
 
       try {
         const products = await fetchProductsFromDatabase()
@@ -89,7 +95,7 @@ function App() {
           setAppState((prev) => ({ ...prev, products }))
         }
       } catch (error) {
-        console.warn('Unable to load products from Supabase; keeping locally saved products.', error)
+        console.warn('Unable to load products from Supabase.', error)
       }
     }
 
@@ -97,6 +103,41 @@ function App() {
 
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase) return
+
+    const channel = supabase
+      .channel('products-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' && payload.new) {
+            setAppState((prev) => {
+              const exists = prev.products.some((p) => p.id === payload.new.id)
+              if (exists) return prev
+              return { ...prev, products: [fromDbProduct(payload.new), ...prev.products] }
+            })
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            setAppState((prev) => ({
+              ...prev,
+              products: prev.products.map((p) => p.id === payload.new.id ? fromDbProduct(payload.new) : p),
+            }))
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setAppState((prev) => ({
+              ...prev,
+              products: prev.products.filter((p) => p.id !== payload.old.id),
+            }))
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      channel.unsubscribe()
     }
   }, [])
 
@@ -272,18 +313,9 @@ function App() {
       }))
       return true
     } catch (error) {
-      console.warn('Supabase seller auth unavailable, using local fallback check.', error)
+      console.warn('Seller authentication failed.', error)
+      return false
     }
-
-    if (trimmedEmail.toLowerCase() === SELLER_EMAIL.toLowerCase() && trimmedPassword === SELLER_PASSWORD) {
-      setAppState((prev) => ({
-        ...prev,
-        sellerSession: { isLoggedIn: true },
-      }))
-      return true
-    }
-
-    return false
   }
 
   const logoutSeller = async () => {
@@ -299,26 +331,10 @@ function App() {
     }))
   }
 
-  const saveProductLocally = (product) => {
-    setAppState((prev) => {
-      const existingIndex = prev.products.findIndex((item) => item.id === product.id)
-      const nextProducts = [...prev.products]
-
-      if (existingIndex >= 0) {
-        nextProducts[existingIndex] = product
-      } else {
-        nextProducts.unshift(product)
-      }
-
-      return { ...prev, products: nextProducts }
-    })
-
-    return { ok: true, product }
-  }
-
   const addOrUpdateProduct = async (product) => {
     if (!supabase) {
-      return saveProductLocally(product)
+      const message = getSupabaseConfigError()
+      return { ok: false, error: message }
     }
 
     try {
@@ -339,19 +355,16 @@ function App() {
 
       return { ok: true, product: savedProduct }
     } catch (error) {
-      console.warn('Product database save failed; saving locally instead.', error)
-      return saveProductLocally(product)
+      const message = error?.message || 'Unable to save product to Supabase.'
+      console.warn('Product database save failed.', error)
+      return { ok: false, error: message }
     }
   }
 
   const deleteProduct = async (productId) => {
     if (!supabase) {
-      setAppState((prev) => ({
-        ...prev,
-        products: prev.products.filter((product) => product.id !== productId),
-      }))
-
-      return { ok: true }
+      const message = getSupabaseConfigError()
+      return { ok: false, error: message }
     }
 
     try {
@@ -364,12 +377,9 @@ function App() {
 
       return { ok: true }
     } catch (error) {
-      console.warn('Product database delete failed; deleting locally instead.', error)
-      setAppState((prev) => ({
-        ...prev,
-        products: prev.products.filter((product) => product.id !== productId),
-      }))
-      return { ok: true }
+      const message = error?.message || 'Unable to delete product from Supabase.'
+      console.warn('Product database delete failed.', error)
+      return { ok: false, error: message }
     }
   }
 
@@ -1457,9 +1467,10 @@ function SellerLoginPage({ onLogin }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
-    const isValid = onLogin(email, password)
+    setError('')
+    const isValid = await onLogin(email, password)
     if (isValid) {
       navigate('/seller/dashboard')
       return
@@ -1535,8 +1546,10 @@ function SellerDashboardPage({ appState }) {
 
 function SellerProductsPage({ appState, onDelete, onUpdate }) {
   const navigate = useNavigate()
+  const [deleteError, setDeleteError] = useState('')
+  const [updateError, setUpdateError] = useState('')
 
-  const handleDuplicate = (product) => {
+  const handleDuplicate = async (product) => {
     const duplicated = {
       ...product,
       id: makeId('product'),
@@ -1545,12 +1558,25 @@ function SellerProductsPage({ appState, onDelete, onUpdate }) {
       status: 'active',
       demo: false,
     }
-    onUpdate(duplicated)
+    const result = await onUpdate(duplicated)
+    if (!result?.ok) {
+      setUpdateError(result?.error || 'Unable to duplicate product.')
+    }
   }
 
-  const toggleStatus = (product) => {
+  const toggleStatus = async (product) => {
     const nextProduct = { ...product, status: product.status === 'active' ? 'inactive' : 'active' }
-    onUpdate(nextProduct)
+    const result = await onUpdate(nextProduct)
+    if (!result?.ok) {
+      setUpdateError(result?.error || 'Unable to update product status.')
+    }
+  }
+
+  const handleDelete = async (productId) => {
+    const result = await onDelete(productId)
+    if (!result?.ok) {
+      setDeleteError(result?.error || 'Unable to delete product.')
+    }
   }
 
   return (
@@ -1559,6 +1585,13 @@ function SellerProductsPage({ appState, onDelete, onUpdate }) {
         <h3>Product management</h3>
         <button type="button" className="primary-button" onClick={() => navigate('/seller/products/new')}>Add product</button>
       </div>
+      {(deleteError || updateError) && (
+        <div className="error-banner">
+          {deleteError && <p>{deleteError}</p>}
+          {updateError && <p>{updateError}</p>}
+          <button type="button" className="ghost-button small" onClick={() => { setDeleteError(''); setUpdateError('') }}>Dismiss</button>
+        </div>
+      )}
       <div className="table-wrap">
         <table>
           <thead>
@@ -1590,7 +1623,7 @@ function SellerProductsPage({ appState, onDelete, onUpdate }) {
                     <button type="button" className="link-button" onClick={() => navigate(`/seller/products/${product.id}/edit`)}>Edit</button>
                     <button type="button" className="link-button" onClick={() => handleDuplicate(product)}>Duplicate</button>
                     <button type="button" className="link-button" onClick={() => toggleStatus(product)}>{product.status === 'active' ? 'Deactivate' : 'Activate'}</button>
-                    <button type="button" className="link-button destructive" onClick={() => onDelete(product.id)}>Delete</button>
+                    <button type="button" className="link-button destructive" onClick={() => handleDelete(product.id)}>Delete</button>
                   </td>
                 </tr>
               ))

@@ -1272,6 +1272,24 @@ textarea {
   color: #b42318;
 }
 
+.error-banner {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b42318;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.error-banner p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 .empty-state {
   padding: 28px 18px;
   border: 1px dashed var(--border);
